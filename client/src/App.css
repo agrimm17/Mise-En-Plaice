@@ -1,0 +1,288 @@
+.App {
+  min-height: 100vh;
+}
+
+.App-header {
+  text-align: center;
+  padding: 40px 20px;
+  color: white;
+}
+
+.App-header h1 {
+  font-size: 3rem;
+  margin-bottom: 10px;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.App-header p {
+  font-size: 1.2rem;
+  opacity: 0.9;
+}
+
+.App-main {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+}
+
+.section {
+  background: white;
+  border-radius: 12px;
+  padding: 30px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.combine-button {
+  width: 100%;
+  padding: 15px 30px;
+  font-size: 1.2rem;
+  font-weight: bold;
+  color: white;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.combine-button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.2);
+}
+
+.combine-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.error-message {
+  background: #fee;
+  color: #c33;
+  padding: 15px;
+  border-radius: 8px;
+  border-left: 4px solid #c33;
+}
+
+.ingredients-section {
+  margin-top: 20px;
+}
+
+.ingredients-section h2 {
+  margin-bottom: 25px;
+  color: #333;
+  font-size: 2rem;
+}
+
+.recipe-ingredients {
+  background: #f8f9fa;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.recipe-ingredients:last-child {
+  margin-bottom: 0;
+}
+
+.recipe-ingredients-title {
+  margin: 0 0 8px 0;
+  color: #667eea;
+  font-size: 1.3rem;
+  font-weight: 600;
+}
+
+.recipe-source {
+  margin: 0 0 15px 0;
+  color: #666;
+  font-size: 0.9rem;
+  font-style: italic;
+}
+
+.ingredients-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.ingredient-item {
+  padding: 8px 0;
+  padding-left: 25px;
+  border-bottom: 1px solid #e0e0e0;
+  color: #333;
+  line-height: 1.6;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: relative;
+  width: 100%;
+  white-space: normal;
+  word-wrap: break-word;
+}
+
+.ingredient-text {
+  flex: 1;
+  padding-right: 10px;
+}
+
+.ingredient-recipe-label {
+  font-size: 0.85rem;
+  color: #667eea;
+  background: #e8ecff;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  margin-left: 10px;
+}
+
+.ingredient-item:last-child {
+  border-bottom: none;
+}
+
+.ingredient-item::before {
+  content: '•';
+  color: #667eea;
+  font-weight: bold;
+  position: absolute;
+  left: 5px;
+}
+
+.no-ingredients {
+  color: #999;
+  font-style: italic;
+  margin: 0;
+}
+
+.consolidated-title {
+  margin: 0 0 8px 0;
+  color: #667eea;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.consolidated-description {
+  color: #666;
+  font-size: 0.95rem;
+  margin-bottom: 15px;
+  font-style: italic;
+}
+
+.consolidated-ingredients-content {
+  background: #f8f9fa;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.copy-button-small {
+  padding: 10px 20px;
+  background: #28a745;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.copy-button-small:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* View Tabs */
+.view-tabs {
+  display: flex;
+  gap: 0;
+  margin-bottom: 0;
+  border-bottom: 2px solid #e0e0e0;
+  padding-bottom: 0;
+  background: #f8f9fa;
+  border-radius: 8px 8px 0 0;
+  overflow: hidden;
+}
+
+.view-tab {
+  flex: 1;
+  padding: 15px 20px;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #666;
+  background: transparent;
+  border: none;
+  border-bottom: 3px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-bottom: -2px;
+  text-align: center;
+}
+
+.view-tab:hover:not(:disabled) {
+  color: #667eea;
+  background: rgba(102, 126, 234, 0.1);
+}
+
+.view-tab.active {
+  color: #667eea;
+  border-bottom-color: #667eea;
+  background: white;
+}
+
+.view-tab:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.view-tab:disabled:hover {
+  background: transparent;
+  color: #666;
+}
+
+@media (max-width: 768px) {
+  .App-header h1 {
+    font-size: 2rem;
+  }
+
+  .section {
+    padding: 20px;
+  }
+
+  .view-tabs {
+    flex-direction: column;
+    gap: 0;
+    border-bottom: none;
+    border-radius: 8px;
+  }
+
+  .view-tab {
+    border-bottom: none;
+    border-left: 3px solid transparent;
+    margin-bottom: 0;
+    margin-left: 0;
+    border-radius: 0;
+    text-align: left;
+  }
+
+  .view-tab.active {
+    border-left-color: #667eea;
+    border-bottom-color: transparent;
+  }
+
+  .view-tab:first-child {
+    border-radius: 8px 8px 0 0;
+  }
+
+  .view-tab:last-child {
+    border-radius: 0 0 8px 8px;
+  }
+}
