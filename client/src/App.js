@@ -121,29 +121,35 @@ function App() {
       }
 
       // Check if response is streaming (Server-Sent Events)
+      // Streaming responses use text/event-stream content type and send data incrementally
       const contentType = response.headers.get('content-type');
       if (contentType && contentType.includes('text/event-stream')) {
         // Handle streaming response
+        // Set streaming flag to optimize UI rendering during stream
         setIsStreaming(true);
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
+        const reader = response.body.getReader(); // Get stream reader
+        const decoder = new TextDecoder(); // Decode binary chunks to text
+        let buffer = ''; // Buffer for incomplete lines
 
+        // Read chunks from the stream until done
         while (true) {
           const { done, value } = await reader.read();
-          if (done) break;
+          if (done) break; // Stream complete
 
+          // Decode chunk and append to buffer
           buffer += decoder.decode(value, { stream: true });
           const lines = buffer.split('\n');
-          buffer = lines.pop() || ''; // Keep incomplete line in buffer
+          buffer = lines.pop() || ''; // Keep incomplete line in buffer for next iteration
 
+          // Process each complete line
           for (const line of lines) {
             if (line.startsWith('data: ')) {
               try {
-                const data = JSON.parse(line.slice(6));
+                const data = JSON.parse(line.slice(6)); // Parse JSON after "data: " prefix
 
                 if (data.type === 'metadata') {
-                  // Set recipes with ingredients from metadata
+                  // Metadata event: Contains recipe information with ingredients
+                  // This arrives first, before the guide starts streaming
                   const recipes = data.recipes || [];
                   setRecipesWithIngredients(recipes);
                   // Automatically consolidate ingredients once we have them
@@ -154,22 +160,24 @@ function App() {
                     !consolidationTriggeredRef.current
                   ) {
                     consolidationTriggeredRef.current = true;
-                    // Pass recipes directly to avoid state race condition
+                    // Small delay ensures state is set before consolidation runs
                     setTimeout(() => {
                       handleConsolidateIngredients(recipes);
                     }, 100);
                   }
                 } else if (data.type === 'chunk') {
-                  // Append chunk to existing guide
+                  // Chunk event: A piece of the meal prep guide text
+                  // Append each chunk immediately to show progress in real-time
                   const chunk = data.chunk;
                   if (chunk) {
                     // Use flushSync to force immediate render (bypasses React batching)
+                    // This ensures the UI updates as each chunk arrives, not all at once
                     flushSync(() => {
                       setMealPrepGuide((prev) => (prev || '') + chunk);
                     });
                   }
                 } else if (data.type === 'done') {
-                  // Generation complete
+                  // Done event: Guide generation is complete
                   setIsStreaming(false);
                   if (data.savedFilename) {
                     setSavedFilename(data.savedFilename);
@@ -188,14 +196,14 @@ function App() {
                     }, 200);
                   }
                 } else if (data.type === 'error') {
-                  // Error occurred during streaming
+                  // Error event: Something went wrong during generation
                   setIsStreaming(false);
                   throw new Error(
                     data.error || 'Failed to generate meal prep guide'
                   );
                 }
               } catch (parseError) {
-                // Skip malformed JSON lines
+                // Skip malformed JSON lines (shouldn't happen, but be defensive)
                 console.warn('Failed to parse SSE data:', parseError);
               }
             }
@@ -203,6 +211,7 @@ function App() {
         }
       } else {
         // Fallback: Handle non-streaming response (for backwards compatibility)
+        // This path is used if the server doesn't support streaming or returns JSON directly
         const data = await response.json();
         setMealPrepGuide(data.mealPrepGuide);
         setSavedFilename(data.savedFilename || null);
@@ -217,7 +226,7 @@ function App() {
           !consolidationTriggeredRef.current
         ) {
           consolidationTriggeredRef.current = true;
-          // Pass recipes directly to avoid state race condition
+          // Small delay ensures state is set before consolidation runs
           setTimeout(() => {
             handleConsolidateIngredients(recipes);
           }, 100);
@@ -274,13 +283,15 @@ function App() {
     setError(null);
 
     try {
+      // Send POST request to consolidate ingredients endpoint
+      // The backend uses AI to group similar ingredients together
       const response = await fetch('/api/recipes/consolidate-ingredients', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          recipes: recipes,
+          recipes: recipes, // Send recipes with their ingredients
         }),
       });
 
@@ -300,6 +311,7 @@ function App() {
       }
 
       // Success: Parse and display the consolidated ingredients
+      // The response contains an array of ingredients grouped by similarity
       const data = await response.json();
       setConsolidatedIngredients(data.consolidatedIngredients || []);
     } catch (err) {

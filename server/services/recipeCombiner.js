@@ -48,28 +48,42 @@ function getOpenAIClient() {
  * @param {Array<Object>} recipes - Array of parsed recipe objects
  * @returns {Object} Object with systemPrompt and userPrompt
  */
+/**
+ * Build prompts for recipe combination
+ *
+ * This helper function formats recipe data and constructs the system and user prompts
+ * that will be sent to OpenAI. It's used by both streaming and non-streaming versions
+ * to avoid code duplication.
+ *
+ * @param {Array<Object>} recipes - Array of parsed recipe objects
+ * @returns {Object} Object containing systemPrompt and userPrompt strings
+ */
 function buildPrompts(recipes) {
   // Step 1: Format recipes for the AI prompt
+  // Convert structured recipe objects into a readable text format that the AI can process
   const recipesText = recipes
     .map((recipe, index) => {
       let text = `Recipe ${index + 1}: ${recipe.title}\n`;
       if (recipe.source) text += `Source: ${recipe.source}\n`;
+      // Format ingredients as a bulleted list
       if (recipe.ingredients && recipe.ingredients.length > 0) {
         text += `Ingredients:\n${recipe.ingredients
           .map((ing) => `- ${ing}`)
           .join('\n')}\n`;
       }
+      // Format instructions as a numbered list
       if (recipe.instructions && recipe.instructions.length > 0) {
         text += `Instructions:\n${recipe.instructions
           .map((inst, i) => `${i + 1}. ${inst}`)
           .join('\n')}\n`;
       }
+      // Include raw content as fallback (limited to 2000 chars to avoid token overflow)
       if (recipe.rawContent) {
         text += `Full Content:\n${recipe.rawContent.substring(0, 2000)}\n`;
       }
       return text;
     })
-    .join('\n---\n\n');
+    .join('\n---\n\n'); // Separate recipes with clear dividers
 
   // Step 2: Construct the AI prompts
   const systemPrompt = `You are an expert meal prep coordinator. Your job is to combine multiple recipes into a single, optimized meal prep guide that allows for efficient simultaneous preparation of all dishes.
@@ -126,25 +140,28 @@ async function combineRecipesStream(recipes, onChunk) {
 
   try {
     // Create streaming API call
+    // The stream: true option enables Server-Sent Events (SSE) from OpenAI
+    // This allows us to receive and forward chunks as they're generated
     const stream = await openaiClient.chat.completions.create({
       model: model,
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
       ],
-      temperature: 0.7,
-      max_tokens: 3000,
-      stream: true, // Enable streaming
+      temperature: 0.7, // Balance between creativity and consistency
+      max_tokens: 3000, // Maximum response length
+      stream: true, // Enable streaming - chunks arrive incrementally
     });
 
     let fullText = '';
 
-    // Process stream chunks
+    // Process stream chunks as they arrive from OpenAI
+    // Each chunk contains a small piece of the generated text (usually a few words)
     for await (const chunk of stream) {
       const content = chunk.choices[0]?.delta?.content || '';
       if (content) {
-        fullText += content;
-        // Send chunk to callback immediately
+        fullText += content; // Accumulate full text for return value
+        // Send chunk to callback immediately for real-time display
         onChunk(content);
       }
     }

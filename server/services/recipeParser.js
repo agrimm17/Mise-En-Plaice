@@ -66,10 +66,12 @@ async function parseRecipeFromUrl(url) {
     });
 
     // Load the HTML into Cheerio for parsing (jQuery-like syntax for server-side)
+    // Cheerio allows us to use CSS selectors to find elements in the HTML
     const $ = cheerio.load(response.data);
 
     // Strategy 1: Extract recipe title
     // Try multiple common patterns used by recipe sites
+    // Most sites use <h1> for the title, but some use specific class names
     const title =
       $('h1').first().text().trim() ||
       $('[class*="recipe-title"]').first().text().trim() ||
@@ -77,9 +79,12 @@ async function parseRecipeFromUrl(url) {
       'Untitled Recipe';
 
     // Strategy 2: Extract ingredients
-    // First, try semantic HTML (microdata) and common class patterns
+    // Recipe sites use various HTML structures, so we try multiple strategies:
+    // 1. Semantic HTML (microdata with itemprop="recipeIngredient")
+    // 2. Common class name patterns (e.g., "ingredient", "recipe-ingredient")
+    // 3. List items within ingredient containers
     let ingredients = [];
-    const seenTexts = new Set();
+    const seenTexts = new Set(); // Track seen ingredients to avoid duplicates
 
     // Look for individual ingredient items, not containers
     // Many sites use <li> elements within ingredient containers
@@ -195,6 +200,7 @@ async function parseRecipeFromUrl(url) {
 
     // Strategy 3: Extract instructions
     // Look for semantic HTML and common class patterns for steps
+    // Most recipe sites use specific containers for instructions
     let instructions = [];
     $(
       '[class*="instruction"], [class*="step"], [itemprop="recipeInstructions"]'
@@ -204,11 +210,12 @@ async function parseRecipeFromUrl(url) {
     });
 
     // Fallback: If no structured instructions, try paragraphs
-    // (Some sites use <p> tags for each step)
+    // Some sites use <p> tags for each step instead of dedicated instruction containers
     if (instructions.length === 0) {
       $('p').each((i, elem) => {
         const text = $(elem).text().trim();
         // Filter for reasonable instruction length (not too short, not too long)
+        // This helps avoid grabbing navigation text or other non-recipe content
         if (text.length > 50 && text.length < 500) {
           instructions.push(text);
         }
@@ -216,11 +223,13 @@ async function parseRecipeFromUrl(url) {
     }
 
     // Strategy 4: If we couldn't extract structured data, use AI as fallback
-    // Extract text from the page and use AI to parse ingredients/instructions
+    // When HTML parsing fails (unusual site structure), we extract raw text
+    // and use OpenAI to intelligently parse ingredients and instructions
     if (ingredients.length === 0 || instructions.length === 0) {
-      const bodyText = $('body').text().substring(0, 5000); // Limit size
+      const bodyText = $('body').text().substring(0, 5000); // Limit size to avoid token overflow
 
       // If we have some data but missing ingredients or instructions, try AI
+      // AI can understand context better than pattern matching
       if (bodyText.length > 100) {
         try {
           const openaiClient = getOpenAIClient();
@@ -288,6 +297,8 @@ ${bodyText}`;
           const parsedData = JSON.parse(responseText);
 
           // Merge AI-extracted data with what we already found
+          // AI may find ingredients/instructions that HTML parsing missed
+          // We prefer AI results if HTML parsing found nothing, but keep HTML results if available
           if (parsedData.ingredients && parsedData.ingredients.length > 0) {
             ingredients = parsedData.ingredients.filter(
               (ing) => ing && ing.trim().length > 0
@@ -298,6 +309,7 @@ ${bodyText}`;
               (inst) => inst && inst.trim().length > 0
             );
           }
+          // AI may also provide a better title if HTML parsing found a generic one
           if (parsedData.title && parsedData.title.trim().length > 0) {
             title = parsedData.title;
           }
@@ -309,13 +321,14 @@ ${bodyText}`;
     }
 
     // Return structured recipe data
-    // Limit arrays to prevent token overflow in AI requests
+    // Limit arrays to prevent token overflow in subsequent AI requests
+    // The rawContent is included as a fallback in case structured parsing missed something
     return {
       title: title || 'Recipe from URL',
       source: url,
-      ingredients: ingredients.slice(0, 50), // Max 50 ingredients
-      instructions: instructions.slice(0, 50), // Max 50 steps
-      rawContent: $('body').text().substring(0, 2000), // Include some raw content for context
+      ingredients: ingredients.slice(0, 50), // Max 50 ingredients to avoid token limits
+      instructions: instructions.slice(0, 50), // Max 50 steps to avoid token limits
+      rawContent: $('body').text().substring(0, 2000), // Include some raw content for context in AI prompts
     };
   } catch (error) {
     console.error('Error parsing recipe from URL:', error);
@@ -343,11 +356,13 @@ ${bodyText}`;
  * const recipe = await parseRecipeFromText('1. Preheat oven to 350°F\n2. Mix flour and sugar...');
  */
 async function parseRecipeFromText(text) {
+  // Validate input
   if (!text || typeof text !== 'string') {
     throw new Error('Invalid recipe text provided');
   }
 
   // If text is very short, just return it as rawContent
+  // No need to call AI for very short inputs - likely not a full recipe
   if (text.trim().length < 50) {
     return {
       title: 'Manual Recipe',
@@ -359,6 +374,8 @@ async function parseRecipeFromText(text) {
   try {
     const openaiClient = getOpenAIClient();
 
+    // Use AI to extract structured data from unstructured text
+    // This allows users to paste recipes in any format and have them automatically parsed
     const systemPrompt = `You are a helpful cooking assistant that extracts structured recipe information from unstructured text.
 
 Your task is to parse recipe text and extract:
@@ -420,6 +437,8 @@ ${text.substring(0, 3000)}`;
     const parsedData = JSON.parse(responseText);
 
     // Validate and structure the response
+    // Filter out empty strings and ensure arrays are properly formatted
+    // Always include original text as rawContent in case AI parsing missed something
     return {
       title: parsedData.title || 'Manual Recipe',
       source: 'manual input',
@@ -431,7 +450,7 @@ ${text.substring(0, 3000)}`;
             (inst) => inst && inst.trim().length > 0
           )
         : [],
-      rawContent: text, // Always include original text as fallback
+      rawContent: text, // Always include original text as fallback for AI recipe combination
     };
   } catch (error) {
     console.error('Error parsing recipe from text with AI:', error);

@@ -49,12 +49,14 @@ router.post('/combine', async (req, res) => {
   try {
     const { recipes } = req.body;
 
+    // Validate input: must have at least one recipe
     if (!recipes || !Array.isArray(recipes) || recipes.length === 0) {
       return res
         .status(400)
         .json({ error: 'Please provide at least one recipe' });
     }
 
+    // Validate recipe types: each recipe must be either 'url' or 'text'
     const invalidRecipe = recipes.find(
       (recipe) => recipe.type !== 'url' && recipe.type !== 'text'
     );
@@ -65,6 +67,8 @@ router.post('/combine', async (req, res) => {
         .json({ error: 'Invalid recipe type. Use "url" or "text"' });
     }
 
+    // Parse all recipes in parallel (URLs are scraped, text is parsed with AI)
+    // This returns an array of structured recipe objects with title, ingredients, instructions, etc.
     const parsedRecipes = await Promise.all(
       recipes.map((recipe) =>
         recipe.type === 'url'
@@ -92,18 +96,23 @@ router.post('/combine', async (req, res) => {
     );
 
     // Step 2: Combine recipes using AI with streaming
+    // combineRecipesStream calls OpenAI API with streaming enabled and invokes
+    // the callback function for each chunk of text as it's generated
     let fullMealPrepGuide = '';
     try {
       fullMealPrepGuide = await combineRecipesStream(parsedRecipes, (chunk) => {
-        // Send each chunk to the client as it arrives
+        // Send each chunk to the client as it arrives via Server-Sent Events (SSE)
+        // Format: "data: {json}\n\n" where json contains type and chunk data
         res.write(`data: ${JSON.stringify({ type: 'chunk', chunk })}\n\n`);
         // Force flush the response to ensure chunks are sent immediately
+        // This prevents buffering that would delay the streaming display
         if (typeof res.flush === 'function') {
           res.flush();
         }
       });
 
       // Step 3: Save the guide to a file for later review
+      // This is optional - if saving fails, we still return the guide to the user
       let savedFilename = null;
       try {
         savedFilename = await saveGuide(fullMealPrepGuide, parsedRecipes);
@@ -113,6 +122,7 @@ router.post('/combine', async (req, res) => {
       }
 
       // Send completion signal with final data
+      // The client uses this to know when streaming is complete
       res.write(
         `data: ${JSON.stringify({
           type: 'done',
@@ -121,7 +131,8 @@ router.post('/combine', async (req, res) => {
       );
       res.end();
     } catch (streamError) {
-      // Send error as SSE event
+      // Send error as SSE event so client can display it properly
+      // This maintains the streaming connection format even for errors
       res.write(
         `data: ${JSON.stringify({
           type: 'error',
@@ -170,6 +181,7 @@ router.post('/consolidate-ingredients', async (req, res) => {
   try {
     const { recipes } = req.body;
 
+    // Validate input: must have at least one recipe with ingredients
     if (!recipes || !Array.isArray(recipes) || recipes.length === 0) {
       return res
         .status(400)
@@ -177,6 +189,8 @@ router.post('/consolidate-ingredients', async (req, res) => {
     }
 
     // Consolidate ingredients using AI
+    // This groups similar ingredients together (e.g., "salt" and "salt, to taste")
+    // and organizes them for easier shopping, while keeping quantities separate
     const consolidatedIngredients = await consolidateIngredients(recipes);
 
     res.json({

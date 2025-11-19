@@ -120,7 +120,9 @@ async function consolidateIngredients(recipes) {
     return [];
   }
 
-  // Collect all ingredients from all recipes with their source information
+  // Step 1: Collect all ingredients from all recipes with their source information
+  // This flattens the nested structure (recipes -> ingredients) into a single array
+  // where each ingredient knows which recipe it came from
   const allIngredients = [];
   recipes.forEach((recipe, recipeIndex) => {
     if (recipe.ingredients && Array.isArray(recipe.ingredients)) {
@@ -137,7 +139,9 @@ async function consolidateIngredients(recipes) {
     return [];
   }
 
-  // Build a unique ingredient map so we can track recipe sources and first appearance
+  // Step 2: Build a unique ingredient map to track recipe sources and first appearance
+  // This deduplicates identical ingredients while preserving which recipes use them
+  // The Map structure allows us to efficiently check for duplicates
   const ingredientMap = new Map();
   let appearanceCounter = 0;
 
@@ -146,28 +150,37 @@ async function consolidateIngredients(recipes) {
     const title = item.recipeTitle || 'Unknown Recipe';
 
     if (!ingredientMap.has(key)) {
+      // First time seeing this exact ingredient - create new entry
       ingredientMap.set(key, {
         ingredient: item.ingredient,
-        recipes: new Set([title]),
-        firstIndex: appearanceCounter++,
+        recipes: new Set([title]), // Use Set to automatically handle duplicate recipe names
+        firstIndex: appearanceCounter++, // Track order of first appearance for sorting
       });
     } else {
+      // Ingredient already exists - just add this recipe to the set
       ingredientMap.get(key).recipes.add(title);
     }
   });
 
+  // Convert Map values to array for easier manipulation
   const uniqueIngredients = Array.from(ingredientMap.values());
 
+  // Step 3: Compute priority for each ingredient based on keyword matching
+  // This helps with manual sorting fallback (e.g., oils come before vegetables)
   uniqueIngredients.forEach((entry) => {
     entry.priority = computeKeywordPriority(entry.ingredient);
   });
 
+  // Step 4: Attempt AI consolidation if enabled
+  // AI can better understand ingredient similarities (e.g., "salt" vs "kosher salt")
+  // and group them more intelligently than keyword matching
   let aiConsolidated = null;
 
   if (USE_OPENAI_CONSOLIDATION) {
     try {
       const openai = getOpenAIClient();
 
+      // Format ingredients as a simple list for the AI prompt
       const ingredientsList = uniqueIngredients
         .map((entry) => `- ${entry.ingredient}`)
         .join('\n');
@@ -254,31 +267,39 @@ Return the organized list with similar ingredients grouped together.`;
 
       const consolidatedText = response.choices[0].message.content.trim();
 
+      // Step 5: Match AI-consolidated ingredients back to our original ingredient data
+      // The AI may return ingredients in a slightly different format, so we need to
+      // match them back to preserve recipe source information
       const normalizedMap = new Map();
       uniqueIngredients.forEach((entry) => {
+        // Create normalized key (lowercase, normalized whitespace) for fuzzy matching
         normalizedMap.set(
           entry.ingredient.toLowerCase().replace(/\s+/g, ' ').trim(),
           entry
         );
       });
 
+      // Parse AI response and match each line back to original ingredients
       aiConsolidated = consolidatedText
         .split('\n')
         .map((line) => line.trim())
         .filter((line) => line.length > 0)
         .map((line) => {
+          // Try exact match first, then normalized match
           const normalized = line.toLowerCase().replace(/\s+/g, ' ').trim();
-
           const matched =
             ingredientMap.get(line) || normalizedMap.get(normalized);
 
           if (matched) {
+            // Found match - preserve original ingredient text and recipe sources
             return {
               ingredient: matched.ingredient,
               recipes: Array.from(matched.recipes),
             };
           }
 
+          // No match found - AI may have reformatted or this is a new ingredient
+          // Return with unknown recipe source
           return {
             ingredient: line,
             recipes: ['Unknown Recipe'],
@@ -294,21 +315,27 @@ Return the organized list with similar ingredients grouped together.`;
     }
   }
 
+  // Step 6: Return AI-consolidated list if available, otherwise use manual sorting
   if (aiConsolidated && aiConsolidated.length > 0) {
     return aiConsolidated;
   }
 
+  // Fallback: Manual sorting using keyword priorities
+  // Ingredients are sorted by priority (oils first, then common ingredients, etc.)
+  // Within the same priority, maintain original order of appearance
   const manualSorted = uniqueIngredients
     .sort((a, b) => {
+      // First sort by priority (lower number = higher priority)
       const priorityDiff = a.priority - b.priority;
       if (priorityDiff !== 0) {
         return priorityDiff;
       }
+      // If same priority, maintain original order
       return a.firstIndex - b.firstIndex;
     })
     .map((entry) => ({
       ingredient: entry.ingredient,
-      recipes: Array.from(entry.recipes),
+      recipes: Array.from(entry.recipes), // Convert Set to Array for JSON serialization
     }));
 
   return manualSorted;
